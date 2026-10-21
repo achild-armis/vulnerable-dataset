@@ -1,29 +1,21 @@
-// CWE-120 / CWE-787: Buffer Copy without Checking Size of Input (Buffer Overflow)
-// CWE-134: Use of Externally-Controlled Format String
-// Vulnerable: fixed-size stack buffer copied into with unchecked strcpy,
-// and user input passed directly as a printf format string.
+// Fixed: CWE-787 Out-of-bounds Write and CWE-134 Externally-Controlled
+// Format String. Copies are now bounded with snprintf, and user-controlled
+// strings are always passed as printf arguments rather than as the format
+// string itself.
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 
 void log_user_action(const char *username, const char *action) {
     char buffer[64];
-    // VULNERABLE: strcpy does not check destination size; a long username
-    // overflows the stack buffer and can corrupt adjacent memory/return address.
-    strcpy(buffer, username);
-    strcat(buffer, " performed: ");
-    strcat(buffer, action);
+    snprintf(buffer, sizeof(buffer), "%s performed: %s", username, action);
 
-    // VULNERABLE: 'action' originates from user input and is used directly as
-    // the format string. An attacker can supply "%s%s%s%n" to read/write memory.
-    printf(action);
-    printf("\n");
+    printf("%s\n", action);
 }
 
 void parse_request(const char *raw_request) {
     char parsed[128];
-    // VULNERABLE: no bounds check on the copy length vs. destination size
-    sprintf(parsed, "REQUEST: %s", raw_request);
+    snprintf(parsed, sizeof(parsed), "REQUEST: %s", raw_request);
     log_user_action("anonymous", parsed);
 }
 

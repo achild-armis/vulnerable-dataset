@@ -1,24 +1,37 @@
-// CWE-502: Deserialization of Untrusted Data
-// Vulnerable: ObjectInputStream.readObject() called on attacker-controlled bytes.
+// Fixed: CWE-502 Deserialization of Untrusted Data.
+// Java object deserialization of attacker-controlled bytes is unsafe regardless
+// of filtering heuristics, so untrusted session/preference payloads are now
+// decoded as JSON instead of going through ObjectInputStream.
 package com.example.app.session;
 
 import java.io.*;
 import java.util.Base64;
+import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class SessionTokenHandler {
 
-    public Object restoreSession(String base64Token) throws IOException, ClassNotFoundException {
-        byte[] data = Base64.getDecoder().decode(base64Token);
-        // VULNERABLE: deserializing untrusted input can lead to remote code execution
-        // via gadget chains in libraries on the classpath (e.g. Commons Collections).
-        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data))) {
-            return ois.readObject();
-        }
+    private static final int MAX_PAYLOAD_BYTES = 64 * 1024;
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    static {
+        // Explicitly ensure polymorphic/default typing is off so the JSON
+        // payload can never instruct Jackson to instantiate arbitrary classes.
+        MAPPER.deactivateDefaultTyping();
     }
 
-    public Object loadCachedPreferences(byte[] rawBytes) throws IOException, ClassNotFoundException {
-        // VULNERABLE: same sink, fed from a cache populated by client-supplied data
-        ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(rawBytes));
-        return ois.readObject();
+    public Map<String, Object> restoreSession(String base64Token) throws IOException {
+        byte[] data = Base64.getDecoder().decode(base64Token);
+        if (data.length > MAX_PAYLOAD_BYTES) {
+            throw new IOException("Payload too large");
+        }
+        return MAPPER.readValue(data, Map.class);
+    }
+
+    public Map<String, Object> loadCachedPreferences(byte[] rawBytes) throws IOException {
+        if (rawBytes.length > MAX_PAYLOAD_BYTES) {
+            throw new IOException("Payload too large");
+        }
+        return MAPPER.readValue(rawBytes, Map.class);
     }
 }

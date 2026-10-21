@@ -1,35 +1,47 @@
-// CWE-79: Cross-Site Scripting (XSS)
-// Vulnerable: user input rendered into the DOM without sanitization,
-// and merged into an object without prototype-pollution protection.
+// Fixed: CWE-79 Cross-Site Scripting (XSS) and CWE-1327 Prototype
+// Pollution. The display name is now HTML-escaped before being embedded
+// in the response, and the settings merge rejects dangerous keys
+// (__proto__, constructor, prototype) and only copies own properties.
 const express = require("express");
+const escapeHtml = require("escape-html");
 const app = express();
 
 app.use(express.json());
 
 app.get("/profile", (req, res) => {
     const displayName = req.query.name;
-    // VULNERABLE: unsanitized user input written directly into HTML response
     res.send(`
         <html>
           <body>
-            <h1>Welcome, ${displayName}!</h1>
+            <h1>Welcome, ${escapeHtml(displayName)}!</h1>
           </body>
         </html>
     `);
 });
 
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+// Merge result objects use a null prototype, so even if a dangerous key
+// slipped past the filter, assigning it would create a plain own property
+// instead of reaching Object.prototype.
 function mergeSettings(defaults, userSettings) {
-    // VULNERABLE: naive deep merge allows "__proto__" keys to pollute
-    // Object.prototype, affecting every object in the application.
-    for (const key in userSettings) {
-        if (typeof userSettings[key] === "object") {
-            defaults[key] = defaults[key] || {};
-            mergeSettings(defaults[key], userSettings[key]);
+    const result = Object.create(null);
+    for (const key of Object.keys(defaults || {})) {
+        result[key] = defaults[key];
+    }
+    for (const key of Object.keys(userSettings || {})) {
+        if (DANGEROUS_KEYS.has(key)) {
+            continue;
+        }
+        const value = userSettings[key];
+        if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            const base = (result[key] !== null && typeof result[key] === "object") ? result[key] : {};
+            result[key] = mergeSettings(base, value);
         } else {
-            defaults[key] = userSettings[key];
+            result[key] = value;
         }
     }
-    return defaults;
+    return result;
 }
 
 app.post("/settings", (req, res) => {

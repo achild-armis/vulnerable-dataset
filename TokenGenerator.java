@@ -1,17 +1,15 @@
-// CWE-330: Use of Insufficiently Random Values
-// Vulnerable: java.util.Random (not cryptographically secure) used to generate
-// password reset tokens and session identifiers.
+// Fixed: CWE-330 / CWE-338 Use of Insufficiently Random Values.
+// java.util.Random is not cryptographically secure; tokens and session
+// identifiers now use java.security.SecureRandom.
 package com.example.app.security;
 
-import java.util.Random;
+import java.security.SecureRandom;
 
 public class TokenGenerator {
 
-    private static final Random random = new Random();
+    private static final SecureRandom random = new SecureRandom();
 
     public String generatePasswordResetToken() {
-        // VULNERABLE: java.util.Random is seeded predictably and is not
-        // suitable for security tokens; outputs can be brute-forced.
         StringBuilder token = new StringBuilder();
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         for (int i = 0; i < 16; i++) {
@@ -21,7 +19,6 @@ public class TokenGenerator {
     }
 
     public long generateSessionId() {
-        // VULNERABLE: predictable session identifier
         return random.nextLong();
     }
 }

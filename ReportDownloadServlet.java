@@ -1,5 +1,6 @@
-// CWE-22: Path Traversal
-// Vulnerable: filename from the request is used directly to construct a File path.
+// Fixed: CWE-22 Path Traversal.
+// The requested filename is resolved and canonicalized, then verified to
+// stay within REPORTS_DIR before it is opened.
 package com.example.app.files;
 
 import java.io.*;
@@ -13,8 +14,12 @@ public class ReportDownloadServlet extends HttpServlet {
             throws ServletException, IOException {
         String filename = request.getParameter("file");
 
-        // VULNERABLE: no normalization or allowlist check; "../../etc/passwd" works
-        File file = new File(REPORTS_DIR + filename);
+        File reportsDir = new File(REPORTS_DIR).getCanonicalFile();
+        File file = new File(reportsDir, filename).getCanonicalFile();
+        if (!file.toPath().startsWith(reportsDir.toPath())) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
 
         try (FileInputStream fis = new FileInputStream(file);
              OutputStream out = response.getOutputStream()) {
