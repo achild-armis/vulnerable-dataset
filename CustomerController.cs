@@ -1,9 +1,10 @@
-// CWE-89: SQL Injection
-// Vulnerable: SqlCommand built via string concatenation with request input.
+// Fixed: CWE-89 SQL Injection (parameterized query), CWE-502
+// Deserialization of Untrusted Data (BinaryFormatter replaced with a
+// safe JSON deserializer), and CWE-798 Hard-coded Credentials
+// (connection string now read from the environment).
 using System;
 using System.Data.SqlClient;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.IO;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ExampleApp.Controllers
@@ -12,8 +13,8 @@ namespace ExampleApp.Controllers
     [Route("api/customers")]
     public class CustomerController : ControllerBase
     {
-        private const string ConnectionString =
-            "Server=prod-sql.internal;Database=crm;User Id=sa;Password=Pa55w0rd!;";
+        private static readonly string ConnectionString =
+            Environment.GetEnvironmentVariable("CRM_DB_CONNECTION_STRING");
 
         [HttpGet("search")]
         public IActionResult Search(string lastName)
@@ -21,9 +22,9 @@ namespace ExampleApp.Controllers
             using var conn = new SqlConnection(ConnectionString);
             conn.Open();
 
-            // VULNERABLE: string concatenation builds the SQL query directly
-            string sql = "SELECT Id, FirstName, LastName, Email FROM Customers WHERE LastName = '" + lastName + "'";
+            string sql = "SELECT Id, FirstName, LastName, Email FROM Customers WHERE LastName = @LastName";
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@LastName", lastName);
             using var reader = cmd.ExecuteReader();
 
             var results = new System.Collections.Generic.List<string>();
@@ -37,12 +38,8 @@ namespace ExampleApp.Controllers
         [HttpPost("import-session")]
         public IActionResult ImportSession([FromBody] byte[] serializedBlob)
         {
-            // VULNERABLE: BinaryFormatter on untrusted input enables remote code
-            // execution via known deserialization gadget chains.
-            var formatter = new BinaryFormatter();
-            using var stream = new MemoryStream(serializedBlob);
-            object restored = formatter.Deserialize(stream);
-            return Ok(restored.ToString());
+            var restored = JsonSerializer.Deserialize<object>(serializedBlob);
+            return Ok(restored?.ToString());
         }
     }
 }
