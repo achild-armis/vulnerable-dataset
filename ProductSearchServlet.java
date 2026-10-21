@@ -12,12 +12,14 @@ public class ProductSearchServlet extends HttpServlet {
         String category = request.getParameter("category");
 
         try (Connection conn = DriverManager.getConnection(
-                "jdbc:postgresql://localhost:5432/store", "app_user", "app_pass")) {
+                "jdbc:postgresql://localhost:5432/store",
+                System.getenv("DB_USER"), System.getenv("DB_PASSWORD"))) {
 
-            Statement stmt = conn.createStatement();
-            // VULNERABLE: string concatenation builds the SQL query
-            String sql = "SELECT id, name, price FROM products WHERE category = '" + category + "'";
-            ResultSet rs = stmt.executeQuery(sql);
+            // FIXED: parameterized query instead of string concatenation
+            PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT id, name, price FROM products WHERE category = ?");
+            stmt.setString(1, category);
+            ResultSet rs = stmt.executeQuery();
 
             StringBuilder out = new StringBuilder();
             while (rs.next()) {

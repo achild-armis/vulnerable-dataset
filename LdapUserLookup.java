@@ -15,13 +15,45 @@ public class LdapUserLookup {
 
         DirContext ctx = new InitialDirContext(env);
 
-        // VULNERABLE: username is concatenated directly into the filter string,
-        // allowing filter injection like "*)(uid=*))(|(uid=*"
-        String filter = "(&(objectClass=person)(uid=" + username + "))";
+        // FIX (CWE-90): escape LDAP filter metacharacters in the untrusted
+        // value before embedding it in the filter string (RFC 4515).
+        String filter = "(&(objectClass=person)(uid=" + escapeLdapFilter(username) + "))";
 
         SearchControls controls = new SearchControls();
         controls.setSearchScope(SearchControls.SUBTREE_SCOPE);
 
         return ctx.search("ou=users,dc=company,dc=com", filter, controls);
+    }
+
+    // FIX (CWE-90): escapes \, *, (, ), and NUL per RFC 4515 so untrusted
+    // input cannot alter the structure of the LDAP search filter.
+    private String escapeLdapFilter(String input) {
+        if (input == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            switch (c) {
+                case '\\':
+                    sb.append("\\5c");
+                    break;
+                case '*':
+                    sb.append("\\2a");
+                    break;
+                case '(':
+                    sb.append("\\28");
+                    break;
+                case ')':
+                    sb.append("\\29");
+                    break;
+                case '\u0000':
+                    sb.append("\\00");
+                    break;
+                default:
+                    sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }

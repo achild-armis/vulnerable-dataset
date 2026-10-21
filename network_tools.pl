@@ -11,16 +11,31 @@ print $cgi->header('text/plain');
 
 my $hostname = $cgi->param('host');
 
-# VULNERABLE: backtick execution with unsanitized user input allows
-# shell metacharacters (;, |, &&) to chain arbitrary commands.
-my $ping_result = `ping -c 1 $hostname`;
+# Defense in depth: restrict to characters valid in a hostname/IP.
+die "Invalid hostname\n" unless $hostname =~ /\A[A-Za-z0-9.\-]+\z/;
+
+# FIXED: list-form open/pipe bypasses the shell entirely, so $hostname is
+# passed as a single argv element rather than being parsed for metacharacters.
+my $ping_result = '';
+open(my $ping_fh, '-|', 'ping', '-c', '1', $hostname)
+    or die "Cannot run ping: $!";
+while (my $line = <$ping_fh>) {
+    $ping_result .= $line;
+}
+close($ping_fh);
 print "Ping result:\n$ping_result\n";
 
 my $report_file = $cgi->param('report');
 
-# VULNERABLE: system() called with a single concatenated string forces
-# shell interpretation of the unsanitized $report_file value.
-system("cat /var/reports/" . $report_file . " > /tmp/output.txt");
+# Defense in depth: restrict to a safe filename charset (no path separators)
+# and reject ".." outright, since a bare ".." has no slash but still resolves
+# to the parent directory once concatenated onto the base path.
+die "Invalid report file\n"
+    unless $report_file =~ /\A[A-Za-z0-9_.\-]+\z/ && $report_file !~ /\.\./;
+
+# FIXED: list-form system() bypasses the shell entirely, so $report_file is
+# passed as a single argv element rather than being interpreted by a shell.
+system('cp', '/var/reports/' . $report_file, '/tmp/output.txt');
 
 open(my $fh, '<', '/tmp/output.txt') or die "Cannot open: $!";
 while (my $line = <$fh>) {

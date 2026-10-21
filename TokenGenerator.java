@@ -3,15 +3,15 @@
 // password reset tokens and session identifiers.
 package com.example.app.security;
 
-import java.util.Random;
+import java.security.SecureRandom;
 
 public class TokenGenerator {
 
-    private static final Random random = new Random();
+    private static final SecureRandom random = new SecureRandom();
 
     public String generatePasswordResetToken() {
-        // VULNERABLE: java.util.Random is seeded predictably and is not
-        // suitable for security tokens; outputs can be brute-forced.
+        // FIXED: SecureRandom is cryptographically strong and not
+        // predictable, unlike java.util.Random.
         StringBuilder token = new StringBuilder();
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         for (int i = 0; i < 16; i++) {
@@ -21,7 +21,7 @@ public class TokenGenerator {
     }
 
     public long generateSessionId() {
-        // VULNERABLE: predictable session identifier
+        // FIXED: SecureRandom produces a non-predictable session identifier
         return random.nextLong();
     }
 }

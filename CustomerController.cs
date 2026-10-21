@@ -2,9 +2,9 @@
 // Vulnerable: SqlCommand built via string concatenation with request input.
 using System;
 using System.Data.SqlClient;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.IO;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace ExampleApp.Controllers
 {
@@ -12,8 +12,14 @@ namespace ExampleApp.Controllers
     [Route("api/customers")]
     public class CustomerController : ControllerBase
     {
-        private const string ConnectionString =
-            "Server=prod-sql.internal;Database=crm;User Id=sa;Password=Pa55w0rd!;";
+        private readonly IConfiguration _configuration;
+
+        public CustomerController(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        private string ConnectionString => _configuration.GetConnectionString("Crm");
 
         [HttpGet("search")]
         public IActionResult Search(string lastName)
@@ -21,9 +27,10 @@ namespace ExampleApp.Controllers
             using var conn = new SqlConnection(ConnectionString);
             conn.Open();
 
-            // VULNERABLE: string concatenation builds the SQL query directly
-            string sql = "SELECT Id, FirstName, LastName, Email FROM Customers WHERE LastName = '" + lastName + "'";
+            // FIXED: parameterized query via SqlParameter instead of string concatenation
+            string sql = "SELECT Id, FirstName, LastName, Email FROM Customers WHERE LastName = @LastName";
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@LastName", lastName);
             using var reader = cmd.ExecuteReader();
 
             var results = new System.Collections.Generic.List<string>();
@@ -37,12 +44,17 @@ namespace ExampleApp.Controllers
         [HttpPost("import-session")]
         public IActionResult ImportSession([FromBody] byte[] serializedBlob)
         {
-            // VULNERABLE: BinaryFormatter on untrusted input enables remote code
-            // execution via known deserialization gadget chains.
-            var formatter = new BinaryFormatter();
-            using var stream = new MemoryStream(serializedBlob);
-            object restored = formatter.Deserialize(stream);
-            return Ok(restored.ToString());
+            // FIXED: BinaryFormatter is unsafe/obsolete and allows RCE via gadget
+            // chains on untrusted input. Use System.Text.Json to deserialize into a
+            // known, non-polymorphic type instead of rehydrating an arbitrary object graph.
+            SessionImport restored = JsonSerializer.Deserialize<SessionImport>(serializedBlob);
+            return Ok(restored?.ToString());
         }
+    }
+
+    public class SessionImport
+    {
+        public string SessionId { get; set; }
+        public string UserId { get; set; }
     }
 }

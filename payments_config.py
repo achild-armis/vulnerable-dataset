@@ -1,16 +1,19 @@
 # CWE-798: Use of Hard-coded Credentials
 # Vulnerable: database and API credentials hardcoded directly in source.
+import os
+
 import psycopg2
 import requests
 
-# VULNERABLE: hardcoded database password
+# FIXED: credentials are now loaded from the environment instead of being
+# hardcoded in source.
 DB_HOST = "prod-db.internal.company.com"
 DB_USER = "admin"
-DB_PASSWORD = "Sup3rSecretPass2024!"
+DB_PASSWORD = os.environ["DB_PASSWORD"]
 
-# VULNERABLE: hardcoded third-party API key
-STRIPE_API_KEY = "sk_live_51HExampleKeyDoNotUseThisInRealCode"
-SECRET_SIGNING_KEY = "my-app-jwt-secret-do-not-share"
+# FIXED: third-party API key and signing secret loaded from the environment.
+STRIPE_API_KEY = os.environ["STRIPE_API_KEY"]
+SECRET_SIGNING_KEY = os.environ["SECRET_SIGNING_KEY"]
 
 
 def get_connection():
