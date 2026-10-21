@@ -9,9 +9,9 @@ app = Flask(__name__)
 @app.route("/import/xml", methods=["POST"])
 def import_xml():
     xml_data = request.get_data()
-    # VULNERABLE: resolve_entities=True (default) allows XXE payloads to read
-    # local files or trigger SSRF via <!ENTITY xxe SYSTEM "...">
-    parser = etree.XMLParser(resolve_entities=True)
+    # FIXED: disable entity resolution, DTD loading, and network access to
+    # prevent XXE payloads from reading local files or triggering SSRF.
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
     tree = etree.fromstring(xml_data, parser=parser)
     name = tree.findtext("name")
     return {"imported_name": name}
@@ -20,8 +20,10 @@ def import_xml():
 @app.route("/orders/upload", methods=["POST"])
 def upload_order_xml():
     raw = request.files["order"].read()
-    # VULNERABLE: default parser settings, no DTD/entity restrictions
-    doc = etree.fromstring(raw)
+    # FIXED: use a hardened parser with entity resolution, DTD loading, and
+    # network access disabled instead of the permissive default parser.
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
+    doc = etree.fromstring(raw, parser=parser)
     return {"root_tag": doc.tag}
 
 

@@ -15,9 +15,9 @@ def search_users():
     name = request.args.get("name", "")
     conn = get_db()
     cursor = conn.cursor()
-    # VULNERABLE: raw string interpolation into SQL
-    query = "SELECT id, name, email FROM users WHERE name = '" + name + "'"
-    cursor.execute(query)
+    # FIXED: parameterized query binds the value separately from the SQL text
+    query = "SELECT id, name, email FROM users WHERE name = ?"
+    cursor.execute(query, (name,))
     rows = cursor.fetchall()
     return {"results": rows}
 

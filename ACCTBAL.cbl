@@ -23,19 +23,27 @@
            DISPLAY "ENTER CUSTOMER NAME: "
            ACCEPT WS-INPUT-NAME.
 
-      *> VULNERABLE: no length check on WS-INPUT-NAME (up to 200 chars)
-      *> before moving it into the 20-byte WS-CUSTOMER-NAME field; COBOL
-      *> will silently truncate but adjacent unchecked paths in this
-      *> codebase use unbounded REDEFINES that can corrupt memory.
-           MOVE WS-INPUT-NAME TO WS-CUSTOMER-NAME.
+      *> FIX (CWE-787): validate length before moving into the fixed
+      *> 20-byte field; reject (do not move) input that would overflow it.
+           IF FUNCTION LENGTH(FUNCTION TRIM(WS-INPUT-NAME)) > 20
+               DISPLAY "ERROR: CUSTOMER NAME EXCEEDS 20 CHARACTERS"
+               MOVE SPACES TO WS-CUSTOMER-NAME
+           ELSE
+               MOVE WS-INPUT-NAME TO WS-CUSTOMER-NAME
+           END-IF.
 
            DISPLAY "ENTER TRANSACTION AMOUNT: "
            ACCEPT WS-INPUT-AMOUNT.
 
-      *> VULNERABLE: no validation that WS-INPUT-AMOUNT is numeric or
-      *> within an acceptable range before arithmetic, allowing corrupted
-      *> or attacker-supplied data to produce incorrect balances.
-           COMPUTE WS-BALANCE = WS-BALANCE + WS-INPUT-AMOUNT.
+      *> FIX (CWE-20): validate WS-INPUT-AMOUNT is numeric and within an
+      *> acceptable range before using it in arithmetic; reject otherwise.
+           IF WS-INPUT-AMOUNT IS NUMERIC
+               AND WS-INPUT-AMOUNT >= 0
+               AND WS-INPUT-AMOUNT <= 9999999.99
+               COMPUTE WS-BALANCE = WS-BALANCE + WS-INPUT-AMOUNT
+           ELSE
+               DISPLAY "ERROR: INVALID TRANSACTION AMOUNT"
+           END-IF.
 
            DISPLAY "NEW BALANCE: " WS-BALANCE.
            STOP RUN.

@@ -11,21 +11,31 @@ public class AccountDetailsServlet extends HttpServlet {
             throws ServletException, java.io.IOException {
 
         String accountId = request.getParameter("accountId");
-        // VULNERABLE: no check that the logged-in user actually owns this accountId.
-        // Any authenticated user can view any other user's account by changing the
-        // accountId parameter (Insecure Direct Object Reference).
+
+        // FIXED: bind resource access to the authenticated principal. The account must
+        // belong to the logged-in user, not merely be reachable by guessing an id.
+        HttpSession session = request.getSession(false);
+        if (session == null || session.getAttribute("userId") == null) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+        String currentUserId = session.getAttribute("userId").toString();
+
         try (Connection conn = DriverManager.getConnection(
                 "jdbc:postgresql://localhost:5432/bank", "app", "app")) {
 
             PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT balance, owner_name, ssn FROM accounts WHERE id = ?");
+                    "SELECT balance, owner_name, ssn FROM accounts WHERE id = ? AND owner_id = ?");
             stmt.setString(1, accountId);
+            stmt.setString(2, currentUserId);
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
                 response.getWriter().write(
                         "Owner: " + rs.getString("owner_name") +
                         ", Balance: " + rs.getDouble("balance"));
+            } else {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN);
             }
         } catch (SQLException e) {
             throw new ServletException(e);

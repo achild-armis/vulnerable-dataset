@@ -8,22 +8,21 @@
 
 void log_user_action(const char *username, const char *action) {
     char buffer[64];
-    // VULNERABLE: strcpy does not check destination size; a long username
-    // overflows the stack buffer and can corrupt adjacent memory/return address.
-    strcpy(buffer, username);
-    strcat(buffer, " performed: ");
-    strcat(buffer, action);
+    // FIXED: bounded snprintf replaces the unchecked strcpy/strcat sequence,
+    // so the write can never exceed the destination buffer and is always
+    // null-terminated.
+    snprintf(buffer, sizeof(buffer), "%s performed: %s", username, action);
 
-    // VULNERABLE: 'action' originates from user input and is used directly as
-    // the format string. An attacker can supply "%s%s%s%n" to read/write memory.
-    printf(action);
+    // FIXED: 'action' is passed as a data argument rather than the format
+    // string, so format specifiers embedded in user input are not interpreted.
+    printf("%s", action);
     printf("\n");
 }
 
 void parse_request(const char *raw_request) {
     char parsed[128];
-    // VULNERABLE: no bounds check on the copy length vs. destination size
-    sprintf(parsed, "REQUEST: %s", raw_request);
+    // FIXED: snprintf bounds the write to the destination buffer size.
+    snprintf(parsed, sizeof(parsed), "REQUEST: %s", raw_request);
     log_user_action("anonymous", parsed);
 }
 

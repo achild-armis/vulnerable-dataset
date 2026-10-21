@@ -13,8 +13,22 @@ public class ReportDownloadServlet extends HttpServlet {
             throws ServletException, IOException {
         String filename = request.getParameter("file");
 
-        // VULNERABLE: no normalization or allowlist check; "../../etc/passwd" works
-        File file = new File(REPORTS_DIR + filename);
+        // FIXED: defensively reject path separators / traversal sequences in the raw
+        // filename, then resolve against the fixed base directory and verify the
+        // canonical result is still contained within it before opening the file.
+        if (filename == null || filename.isEmpty()
+                || filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+
+        File baseDir = new File(REPORTS_DIR).getCanonicalFile();
+        File file = new File(baseDir, filename).getCanonicalFile();
+
+        if (!file.getPath().startsWith(baseDir.getPath() + File.separator)) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
 
         try (FileInputStream fis = new FileInputStream(file);
              OutputStream out = response.getOutputStream()) {
